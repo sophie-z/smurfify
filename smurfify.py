@@ -7,5 +7,3 @@ PURPOSE: Smurfify camera (OpenCV lab project)
 import cv2
 import numpy as np
 import os
-
-# having trouble syncing?
