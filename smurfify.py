@@ -4,6 +4,10 @@ DATE: October 2025
 PURPOSE: Smurf transmogrifier program ("Smurfify" camera) 
 '''
 
+# 10/10 notes:
+# - make eyes/mouth retain natural color?
+# - 
+
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -17,10 +21,10 @@ def overlay_rgba_on_bgr(frame, rgba_image, x, y, angle_deg=0, scale=1.0):
     new_h = max(1, int(h * scale))
     overlay = cv2.resize(rgba_image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-    # rotate around the overlay center (if needed)
+    # rotate around the overlay center if needed
     if abs(angle_deg) > 0.1:
         M = cv2.getRotationMatrix2D((new_w // 2, new_h // 2), angle_deg, 1.0)
-        # Keep full canvas size; transparent border
+        # keep full canvas size; transparent border
         overlay = cv2.warpAffine(
             overlay, M, (new_w, new_h),
             flags=cv2.INTER_LINEAR,
@@ -40,8 +44,8 @@ def overlay_rgba_on_bgr(frame, rgba_image, x, y, angle_deg=0, scale=1.0):
 
     # compute how many pixels we CAN take from overlay from (rx0,ry0)
     # if hat is rotated or off screen the overlay gets messed up
-    # so we need to figure out the visible overlap of the hat and frame and clip everything else 
-    # prevents trying to blend hat’s alpha and frame’s ROI that are different sizes
+    # so we figure out visible overlap of the hat+frame and clip everything else 
+    # prevents trying to blend hat alpha+frame’s ROI that are different sizes
     max_w = new_w - rx0
     max_h = new_h - ry0
     need_w = x1 - x0
@@ -87,10 +91,11 @@ def build_skin_mask_via_facecolor(frame_bgr, face_boxes):
     if hsv_center is None:
         return np.zeros(frame_bgr.shape[:2], dtype=np.uint8)
 
-    # allow wider tolerance on HSV
-    # 8 for hue bc skin color shouldn't vary that much
+    # specify tolerance on HSV values 
+    # 6 for hue bc skin color shouldn't vary much; leaves eyes/lips mostly alone
     # 50 for saturation and value to adjust for lighting and stuff
-    return global_skin_mask_from_color(frame_bgr, hsv_center, tol_h=8, tol_s=50, tol_v=50)
+    return global_skin_mask_from_color(frame_bgr, hsv_center, tol_h=6, 
+                                       tol_s=50, tol_v=50)
 
 #------------------------------------------------------------------------------#
 def median_skin_hsv_from_face(frame_bgr, face_box):
@@ -108,12 +113,14 @@ def median_skin_hsv_from_face(frame_bgr, face_box):
     if face.size == 0:
         return None
 
+    # canny edge detection to find face in bbox
     gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5,5), 0)
     edges = cv2.Canny(gray, 60, 150)
+    # morph cleanup
     k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
     edges = cv2.dilate(edges, k, iterations=1)
-    smooth_mask = cv2.bitwise_not(edges)  # 255 where smooth
+    smooth_mask = cv2.bitwise_not(edges) 
 
     hsv = cv2.cvtColor(face, cv2.COLOR_BGR2HSV)
     h, s, v = cv2.split(hsv)
@@ -121,6 +128,7 @@ def median_skin_hsv_from_face(frame_bgr, face_box):
     val_gate = (v > 60)
     m = (smooth_mask > 0) & sat_gate & val_gate
 
+    # if sample not big enough, return none
     if np.count_nonzero(m) < 200:
         return None
 
@@ -128,7 +136,7 @@ def median_skin_hsv_from_face(frame_bgr, face_box):
     return (h0, s0, v0)
 
 #------------------------------------------------------------------------------#
-def global_skin_mask_from_color(frame_bgr, hsv_center, tol_h=8, tol_s=50, tol_v=50):
+def global_skin_mask_from_color(frame_bgr, hsv_center, tol_h=6, tol_s=50, tol_v=50):
     '''
     Given center HSV color (from the face), find similar colors across frame.
     Uses circular distance for hue & absolute distance for S/V. 
@@ -150,6 +158,7 @@ def global_skin_mask_from_color(frame_bgr, hsv_center, tol_h=8, tol_s=50, tol_v=
     mask = (dh <= tol_h) & (ds <= tol_s) & (dv <= tol_v)
     mask = (mask.astype(np.uint8) * 255)
 
+    # form skin mask
     k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  k, iterations=1)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k, iterations=2)
@@ -178,9 +187,10 @@ def colorize_skin_to_blue(frame_bgr, mask, hue_h=105, sat=140):
 LEFT_EYE_OUTER  = 263  # viewer's right eye outer corner (person's left)
 RIGHT_EYE_OUTER = 33   # viewer's left eye outer corner (person's right)
 FOREHEAD_TOP    = 10   # near top of forehead
+
 # -----------------------------------------------------------------------------#
 def lm_xy(landmark, width: int, height: int) -> tuple[int, int]:
-    '''Convert MediaPipe normalized landmark to pixel coordinates.'''
+    '''Convert MediaPipe normalized landmark to usable pixel coordinates.'''
     # mediapipe returns landmark coordinates normalized 0-1 from img size
     return int(landmark.x * width), int(landmark.y * height)
 
@@ -195,7 +205,8 @@ def head_tilt_deg(landmarks, width: int, height: int) -> float:
         x2, y2 = lm_xy(landmarks[LEFT_EYE_OUTER],  width, height)
         dy, dx = (y2 - y1), (x2 - x1)
         # dy is neg to convert image coords to cartesian
-        # y increases downward in our images, but cv2 cartesian thinks positive angles are CCW (y up)
+        # y increases going downward in our images
+        # but cv2 thinks positive angles are CCW (y going upward), so we flip
         return float(np.degrees(np.arctan2(-dy, dx))) 
     
     except Exception:
@@ -206,7 +217,7 @@ def hat_anchor_and_width(landmarks, width: int, height: int,
                          ) -> tuple[int, int, int]:
     '''
     Choose where to place the hat and how wide it should be.
-    Horizontal center = use face bbox center (robust)
+    Horizontal center = use face bbox center
     Vertical anchor = above the FOREHEAD_TOP landmark (top of bbox if missing)
     Returns (anchor_center_x, anchor_top_y, hat_width_pixels).
     '''
@@ -237,10 +248,10 @@ def main():
     # load hat image (must be RGBA with transparency)
     hat_rgba = cv2.imread('white_hat.png', cv2.IMREAD_UNCHANGED)
     if hat_rgba is None or (hat_rgba.shape[2] != 4):
-        raise RuntimeError("white_hat.png not found or missing alpha channel. " \
-                          "Use a transparent PNG (RGBA).")
+        raise RuntimeError("white_hat.png not found or missing alpha channel." \
+                          " Use a transparent PNG (RGBA).")
 
-    # initialize MediaPipe (mesh for landmarks, detection for bboxes)
+    # initialize mediapipe (mesh for landmarks, detection for bboxes)
     mp_face_mesh = mp.solutions.face_mesh
     mp_face_det  = mp.solutions.face_detection
 
@@ -255,8 +266,7 @@ def main():
     save_idx = 0
 
     while True:
-        SELFIE_VIEW = False 
-
+        SELFIE_VIEW = False # unmirror webcam
         ok, frame = cap.read()
         if not ok:
             break
@@ -342,7 +352,6 @@ main()
 #     # keep 0-255 and convert back to uint8
 #     return np.clip(out, 0, 255).astype(np.uint8) 
 
-
 # -----------------------------------------------------------------------------#
 # def skin_mask(frame_bgr):
 #     '''Create mask of pixels with detected skin color.'''
@@ -362,33 +371,3 @@ main()
 #     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k, iterations=2)
 #     mask = cv2.GaussianBlur(mask, (5,5), 0)
 #     return mask
-
-
-
-# # convert relative bboxes to pixel rectangles
-#         bboxes = []
-#         if det_res.detections:
-#             for det in det_res.detections:
-#                 rb = det.location_data.relative_bounding_box
-#                 fx = int(rb.xmin  * W)
-#                 fy = int(rb.ymin  * H)
-#                 fw = int(rb.width * W)
-#                 fh = int(rb.height* H)
-#                 bboxes.append((fx, fy, fw, fh))
-
-
-# -----------------------------------------------------------------------------#
-# def gray_world_wb(bgr):
-#     '''
-#     Normalize warm cast with white-balance function.
-#     (Mean of the R/G/B channels should be the same)
-#     '''
-#     b, g, r = cv2.split(bgr.astype(np.float32))
-#     mB, mG, mR = b.mean(), g.mean(), r.mean()
-#     gray = (mB + mG + mR) / 3.0 + 1e-6
-#     b *= gray / mB; g *= gray / mG; r *= gray / mR
-    
-#     return np.clip(cv2.merge([b,g,r]), 0, 255).astype(np.uint8)
-
-# # build global skin mask (face + hands/arms) and apply blue tint
-# frame = gray_world_wb(frame)
