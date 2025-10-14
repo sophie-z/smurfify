@@ -4,22 +4,21 @@ DATE: October 2025
 PURPOSE: Smurf transmogrifier program ("Smurfify" camera) 
 '''
 
-# 10/10 notes:
-# - make eyes/mouth retain natural color?
-# - 
-
 import cv2
 import numpy as np
 import mediapipe as mp
 import os
 
-def overlay_rgba_on_bgr(frame, rgba_image, x, y, angle_deg=0, scale=1.0):
+def overlay_rgba_on_bgr(frame: np.ndarray, rgba_image: np.ndarray, x: int, 
+                        y: int, angle_deg: float = 0, 
+                        scale: float = 1.0) -> np.ndarray:
     '''Overlay an RBGA image into the webcam.'''
     # resize
     h, w = rgba_image.shape[:2]
     new_w = max(1, int(w * scale))
     new_h = max(1, int(h * scale))
-    overlay = cv2.resize(rgba_image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    overlay = cv2.resize(rgba_image, (new_w, new_h), 
+                         interpolation=cv2.INTER_AREA)
 
     # rotate around the overlay center if needed
     if abs(angle_deg) > 0.1:
@@ -75,10 +74,12 @@ def overlay_rgba_on_bgr(frame, rgba_image, x, y, angle_deg=0, scale=1.0):
     return frame
         
 #------------------------------------------------------------------------------#
-def build_skin_mask_via_facecolor(frame_bgr, face_boxes):
+def build_skin_mask_via_facecolor(frame_bgr: np.ndarray, 
+                                  face_boxes: list[tuple[int, int, int, int]]
+                                  ) -> np.ndarray:
     '''
     Estimate face skin HSV from face edges and turn into full skin mask.
-    If no face found (or poor sample), return 0s
+    If no face found (or poor sample), return 0s (x/y/w/h)
     '''
     if not face_boxes:
         return np.zeros(frame_bgr.shape[:2], dtype=np.uint8)
@@ -98,7 +99,9 @@ def build_skin_mask_via_facecolor(frame_bgr, face_boxes):
                                        tol_s=50, tol_v=50)
 
 #------------------------------------------------------------------------------#
-def median_skin_hsv_from_face(frame_bgr, face_box):
+def median_skin_hsv_from_face(frame_bgr: np.ndarray, 
+                              face_box: tuple[int, int, int, int]
+                              ) -> tuple[int, int, int] | None:
     '''
     Inside the face box, keep only smooth (non-edge) regions (likely skin)
     and compute the median HSV color over those pixels.
@@ -132,11 +135,16 @@ def median_skin_hsv_from_face(frame_bgr, face_box):
     if np.count_nonzero(m) < 200:
         return None
 
-    h0 = int(np.median(h[m])); s0 = int(np.median(s[m])); v0 = int(np.median(v[m]))
+    h0 = int(np.median(h[m]))
+    s0 = int(np.median(s[m]))
+    v0 = int(np.median(v[m]))
     return (h0, s0, v0)
 
 #------------------------------------------------------------------------------#
-def global_skin_mask_from_color(frame_bgr, hsv_center, tol_h=6, tol_s=50, tol_v=50):
+def global_skin_mask_from_color(frame_bgr: np.ndarray, 
+                                hsv_center: tuple[int, int, int], 
+                                tol_h: int = 6, tol_s: int = 50, 
+                                tol_v: int = 50) -> np.ndarray:
     '''
     Given center HSV color (from the face), find similar colors across frame.
     Uses circular distance for hue & absolute distance for S/V. 
@@ -166,7 +174,8 @@ def global_skin_mask_from_color(frame_bgr, hsv_center, tol_h=6, tol_s=50, tol_v=
     return mask
 
 #------------------------------------------------------------------------------#
-def colorize_skin_to_blue(frame_bgr, mask, hue_h=105, sat=140):
+def colorize_skin_to_blue(frame_bgr: np.ndarray, mask: np.ndarray, 
+                          hue_h: int = 105, sat: int = 140) -> np.ndarray:
     '''Add blue hue to skin pixels.'''
     # hue_h: OpenCV hue is 0-179; 105 is around smurf blue
     # sat: saturation is 0-255; 140 is about the vividness of a smurf
@@ -184,18 +193,20 @@ def colorize_skin_to_blue(frame_bgr, mask, hue_h=105, sat=140):
 # Face Mesh provides 468 landmarks. we’ll use some of em here:
 # 1) right/left outer eye corners to estimate head tilt
 # 2) top-of-forehead landmark for vertical hat anchor
+# storage.googleapis.com
+# /mediapipe-assets/documentation/mediapipe_face_landmark_fullsize.png
 LEFT_EYE_OUTER  = 263  # viewer's right eye outer corner (person's left)
 RIGHT_EYE_OUTER = 33   # viewer's left eye outer corner (person's right)
 FOREHEAD_TOP    = 10   # near top of forehead
 
 # -----------------------------------------------------------------------------#
-def lm_xy(landmark, width: int, height: int) -> tuple[int, int]:
+def lm_xy(landmark: tuple[int, int], width: int, height: int) -> tuple[int, int]:
     '''Convert MediaPipe normalized landmark to usable pixel coordinates.'''
     # mediapipe returns landmark coordinates normalized 0-1 from img size
     return int(landmark.x * width), int(landmark.y * height)
 
 # -----------------------------------------------------------------------------#
-def head_tilt_deg(landmarks, width: int, height: int) -> float:
+def head_tilt_deg(landmarks: list, width: int, height: int) -> float:
     '''
     Estimate head tilt using the line through the two outer eye corners.
     Returns angle in degrees (positive = counter clock wise).
@@ -212,7 +223,7 @@ def head_tilt_deg(landmarks, width: int, height: int) -> float:
     except Exception:
         return 0.0 # if it can't find both eyes 
 # -----------------------------------------------------------------------------#
-def hat_anchor_and_width(landmarks, width: int, height: int,
+def hat_anchor_and_width(landmarks: list, width: int, height: int,
                          face_bbox: tuple[int, int, int, int]
                          ) -> tuple[int, int, int]:
     '''
@@ -262,7 +273,8 @@ def main():
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5
     )
-    face_det = mp_face_det.FaceDetection(model_selection=0, min_detection_confidence=0.5)
+    face_det = mp_face_det.FaceDetection(model_selection=0, 
+                                         min_detection_confidence=0.5)
     save_idx = 0
 
     while True:
@@ -296,11 +308,13 @@ def main():
         if mesh_res.multi_face_landmarks:
             for i, face_landmarks in enumerate(mesh_res.multi_face_landmarks):
                 # pick a bbox for this face by index 
-                bbox = bboxes[i] if i < len(bboxes) else (W//4, H//4, W//4, H//4)
+                bbox = bboxes[i] if i < len(bboxes) else (W//4, H//4, 
+                                                          W//4, H//4)
                 # estimate head tilt from eye outer corners
                 angle = head_tilt_deg(face_landmarks.landmark, W, H)
                 # compute hat anchor and size
-                cx, top_y, hat_w = hat_anchor_and_width(face_landmarks.landmark, W, H, bbox)
+                cx, top_y, hat_w = hat_anchor_and_width(face_landmarks.landmark, 
+                                                        W, H, bbox)
                 # scale hat to the computed width (keep aspect ratio)
                 scale = hat_w / hat_rgba.shape[1]
                 hat_h = int(hat_rgba.shape[0] * scale)
@@ -313,7 +327,8 @@ def main():
 
         # UI text and display
         cv2.putText(smurf, "Smurf Cam (MediaPipe)  |  q: quit  s: save",
-                    (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+                    (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 
+                    2, cv2.LINE_AA)
 
         cv2.imshow("Smurf Cam (MediaPipe)", smurf)
         key = cv2.waitKey(1) & 0xFF
@@ -331,43 +346,4 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
 
-
 main()
-
-
-
-
-
-
-# -----------------------------------------------------------------------------#
-# def apply_smurf_tint(frame_bgr, mask, blue_bgr=(136, 204, 255), strength=0.65):
-#     '''Tint pixels blue when mask>0'''
-#     # default tint is smurf blue at 0.65 intensity
-#     tint = np.full_like(frame_bgr, blue_bgr, np.uint8)
-#     alpha = (mask.astype(np.float32) / 255.0) * strength
-#     alpha = alpha[..., None]
-#     out = (alpha * tint.astype(np.float32) + (1.0 - alpha) 
-#            * frame_bgr.astype(np.float32))
-    
-#     # keep 0-255 and convert back to uint8
-#     return np.clip(out, 0, 255).astype(np.uint8) 
-
-# -----------------------------------------------------------------------------#
-# def skin_mask(frame_bgr):
-#     '''Create mask of pixels with detected skin color.'''
-#     img = cv2.GaussianBlur(frame_bgr, (5,5), 0)
-#     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-#     ycc = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-
-#     mask_hsv = cv2.inRange(hsv, np.array([0, 40, 70], np.uint8),
-#                                 np.array([25,220,255], np.uint8))
-#     mask_ycc = cv2.inRange(ycc, np.array([0,135, 80], np.uint8),
-#                                 np.array([255,170,130], np.uint8))
-
-#     mask = cv2.bitwise_and(mask_hsv, mask_ycc)
-
-#     k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-#     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  k, iterations=1)
-#     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k, iterations=2)
-#     mask = cv2.GaussianBlur(mask, (5,5), 0)
-#     return mask
