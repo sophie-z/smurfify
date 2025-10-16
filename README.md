@@ -1,22 +1,29 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/rgnQFwDS)
-# OpenCV-Project
-Author: Sophie Zeng
+# OpenCV Project: SMURFIFY!
+Author: Sophie Zeng 
+Date: October 2025
+
+## Overview
+Have you ever wanted to see what you look like as a smurf? Look no further. The esteemed smurf transmogrifier, dubbed SMURFIFY, is here to assist. 
+
+## Installation
+```pip install opencv-python numpy mahotas mediapipe```
 
 ## Chapters Represented:
 ### Chapter 3
-- 3.2, Loading, Displaying, and Saving — cv2.imshow(), cv2.imwrite(), cv2.waitKey()
+- 3.2, Loading, Displaying, and Saving — imshow(), imwrite(), waitKey()
 ### Chapter 6
-- 6.1, Image Transformations — cv2.warpAffine(), cv2.getRotationMatrix2D(), cv2.resize(), cv2.flip()
-- 6.3, Bitwise Operations — cv2.bitwise_not()
-- 6.5, Splitting and Merging Channels — cv2.merge()
-- 6.6, Color Spaces — cv2.cvtColor()
+- 6.1, Image Transformations — warpAffine(), getRotationMatrix2D(), resize(), flip()
+- 6.3, Bitwise Operations — bitwise_not()
+- 6.5, Splitting and Merging Channels — merge()
+- 6.6, Color Spaces — cvtColor()
 ### Chapter 8
-- 8.2, Gaussian — cv2.GaussianBlur()
+- 8.2, Gaussian — GaussianBlur()
 ### Chapter 10
-- 10.2, Canny Edge Detector — cv2.Canny()
+- 10.2, Canny Edge Detector — Canny()
 ### Morphology
-- cv2.dilate(), cv2.getStructuringElement(), cv2.morphologyEx()
+- dilate(), getStructuringElement(), morphologyEx()
 ### Other OpenCV Functions
-- cv2.VideoCapture(), cv2.putText(), cv2.destroyAllWindows()
+- VideoCapture(), putText(), destroyAllWindows()
 ### Mediapipe
 - FaceDetection(), FaceMesh()
