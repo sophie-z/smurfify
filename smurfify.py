@@ -65,9 +65,9 @@ def overlay_rgba_on_bgr(frame: np.ndarray, rgba_image: np.ndarray, x: int,
     if patch.shape[2] == 4:
         b, g, r, a = cv2.split(patch)
         alpha = (a.astype(np.float32) / 255.0)[..., None]
-        rgb   = cv2.merge([b, g, r]).astype(np.float32)
-        base  = roi_bgr.astype(np.float32)
-        out   = alpha * rgb + (1.0 - alpha) * base
+        rgb = cv2.merge([b, g, r]).astype(np.float32)
+        base = roi_bgr.astype(np.float32)
+        out = alpha * rgb + (1.0 - alpha) * base
         frame[y0:y1, x0:x1] = np.clip(out, 0, 255).astype(np.uint8)
     else:
         frame[y0:y1, x0:x1] = patch[..., :3]
@@ -85,8 +85,8 @@ def build_skin_mask_via_facecolor(frame_bgr: np.ndarray,
         return np.zeros(frame_bgr.shape[:2], dtype=np.uint8)
 
     # pick largest bbox 
-    areas = [w*h for (_,_,w,h) in face_boxes]
-    face_box = face_boxes[int(np.argmax(areas))]
+    areas = [w*h for (_,_,w,h) in face_boxes] # we just care about w/h
+    face_box = face_boxes[int(np.argmax(areas))] 
 
     hsv_center = median_skin_hsv_from_face(frame_bgr, face_box)
     if hsv_center is None:
@@ -94,7 +94,7 @@ def build_skin_mask_via_facecolor(frame_bgr: np.ndarray,
 
     # specify tolerance on HSV values 
     # 6 for hue bc skin color shouldn't vary much; leaves eyes/lips mostly alone
-    # 50 for saturation and value to adjust for lighting and stuff
+    # 50 for saturation and value to adjust for lighting and other factors
     return global_skin_mask_from_color(frame_bgr, hsv_center, tol_h=6, 
                                        tol_s=50, tol_v=50)
 
@@ -331,7 +331,7 @@ def main():
                     2, cv2.LINE_AA)
 
         cv2.imshow("Smurf Cam (MediaPipe)", smurf)
-        key = cv2.waitKey(1) & 0xFF
+        key = cv2.waitKey(1)
 
         # q to quit and s to save frame
         if key == ord('q'):
